@@ -68,7 +68,7 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=50, roi_fractio
     cv2.imshow("Canny", edges)
     #cv2.imshow("gray", gray)
 
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     contours = [c for c in contours if cv2.contourArea(c) > min_area]
     if len(contours) == 0:
         print('no contours found')
@@ -137,13 +137,6 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=50, roi_fractio
     #endregion
 
     #region data
-    M = cv2.moments(main_contour)
-
-    if M['m00'] != 0:
-        cx = M["m10"] / M["m00"]
-        cy = M["m01"] / M["m00"]
-    else:
-        cx = cy = np.nan
     points = resample(main_contour, pointCount)
     if points is None: return None
 
