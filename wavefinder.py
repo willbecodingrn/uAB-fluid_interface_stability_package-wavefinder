@@ -9,8 +9,10 @@ This module will import a video, analyze each frame to calculate the interface s
 6. compute fingering geometry (geometric method, probably more expensive but accurate)
 '''
 #import as needed
-import cv2, time, json
-import numpy as np, sys
+import cv2
+import time
+import numpy as np
+import sys
 
 '''
 path = "jack_data/Exp videos/"
@@ -32,6 +34,11 @@ def clear_bar():
     sys.stdout.flush()
 #endregion
 
+def polarize(coord, centre=(0,0)):
+    r = np.sqrt((coord[0]-centre[0])**2 + (coord[1]-centre[1])**2)
+    theta = np.atan2((coord[0] - centre[0]), (coord[1] - centre[1]))
+    return float(r), float(theta)
+
 def resample(contour, pointCount=200):
     points = contour.reshape(-1,2).astype(np.float64)
 
@@ -52,6 +59,7 @@ def resample(contour, pointCount=200):
 
 def translate(frame, prevCentroid=None, pointCount=200, min_area=50, roi_fraction=0.3, max_distance=None, console=True):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    f_height, f_width = frame.shape[:2]
 
     #increasing local constrast to try to fix broken contours
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
@@ -61,7 +69,7 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=50, roi_fractio
     #region geometry
     edges = cv2.Canny(blurred, threshold1=20, threshold2=90) #adjust these
     #kernel = np.ones((3,3), np.uint8)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5)) #resewing
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7,7)) #resewing, was 5,5; might need to be odd
     edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=2)
 
     #debbugging windows
@@ -84,11 +92,14 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=50, roi_fractio
         if M["m00"] == 0: continue
         cx = M["m10"] / M["m00"]
         cy = M["m01"] / M["m00"]
-        candidates.append({"contour": c, "centroid": (cx, cy), "area":cv2.contourArea(c)})
-        if len(candidates) ==0:
-            if console: print("no valid contour centroids found")
-            return None
-    f_height, f_width = frame.shape[:2]
+        can_radii = np.sqrt(np.sum((c-[cx,cy])**2, axis=-1))
+        if 2*max(can_radii) > (f_height*0.95): continue
+        else:
+            candidates.append({"contour": c, "centroid": (cx, cy), "area":cv2.contourArea(c)})
+
+    if len(candidates) ==0:
+        if console: print("no valid contour centroids found")
+        return None
 
     #region frame logic
     if prevCentroid == None:
@@ -154,11 +165,8 @@ def stability(coords):
     x_list = coords[0]
     y_list = coords[1]
     centre = (np.average(x_list), np.average(y_list))
-
     radii = np.sqrt((x_list - centre[0])**2 + (y_list - centre[1])**2)
-
-    score = np.std(radii)
-    return score
+    return np.std(radii)
 
 def retina(path, livePlay=True, save=False, singular=True, nc_points=200, showText=False, display=True):
     #region init video
