@@ -34,11 +34,6 @@ def clear_bar():
     sys.stdout.flush()
 #endregion
 
-def polarize(coord, centre=(0,0)):
-    r = np.sqrt((coord[0]-centre[0])**2 + (coord[1]-centre[1])**2)
-    theta = np.atan2((coord[0] - centre[0]), (coord[1] - centre[1]))
-    return float(r), float(theta)
-
 def resample(contour, pointCount=200):
     points = contour.reshape(-1,2).astype(np.float64)
 
