@@ -52,19 +52,19 @@ def resample(contour, pointCount=200):
     y = np.interp(sample_pos, cumulative_length, points_closed[:, 1])
     return np.column_stack((x,y))
 
-def translate(frame, prevCentroid=None, pointCount=200, min_area=50, roi_fraction=0.3, max_distance=None, console=True):
+def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fraction=0.1, max_distance=None, console=True):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     f_height, f_width = frame.shape[:2]
+    max_r = 0.96*0.5*f_height
 
-    #increasing local constrast to try to fix broken contours
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(15,15)) #increasing local constrast to try to fix broken contours
     gray = clahe.apply(gray)
     blurred = cv2.GaussianBlur(gray, (3,3), 0)
 
     #region geometry
     edges = cv2.Canny(blurred, threshold1=20, threshold2=90) #adjust these
     #kernel = np.ones((3,3), np.uint8)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7,7)) #resewing, was 5,5; might need to be odd
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15,15)) #resewing, was 5,5; might need to be odd
     edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=2)
 
     #debbugging windows
@@ -88,7 +88,7 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=50, roi_fractio
         cx = M["m10"] / M["m00"]
         cy = M["m01"] / M["m00"]
         can_radii = np.sqrt(np.sum((c-[cx,cy])**2, axis=-1))
-        if 2*max(can_radii) > (f_height*0.95): continue
+        if max(can_radii) > max_r: continue
         else:
             candidates.append({"contour": c, "centroid": (cx, cy), "area":cv2.contourArea(c)})
 
@@ -118,11 +118,6 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=50, roi_fractio
             if console: print('no contour centroid found within ROI')
             return None
 
-        '''
-        implement nuanced selection criteria:
-            > combines considerations in area, average radii, distance to previous interation
-        '''
-
         selected = max(roi_candidates, key=lambda candidate: candidate["area"])
 
     else:
@@ -148,10 +143,11 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=50, roi_fractio
 
     #endregion
     annotated = frame.copy()
-    cv2.drawContours(annotated, [main_contour], -1, (0, 255, 0), 2)
+    cv2.drawContours(annotated, [main_contour], -1, (0, 255, 0), 1)
+    if not np.isnan(cx): cv2.circle(annotated, (int(cx), int(cy)), 5, (0,0,255), -1)
 
-    if not np.isnan(cx):
-        cv2.circle(annotated, (int(cx), int(cy)), 5, (0,0,255), -1)
+    #debugging
+    cv2.circle(annotated, (int(cx), int(cy)), int(max_r), (255,255,0), 1)
 
     return points, annotated
 
@@ -289,6 +285,7 @@ def shutter(path, save=False, nc_points=200):
             curr_stable = stability(c_points)
         else:
             shown_frame = raw.copy()
+            curr_stable = np.nan
 
         print(f'stability score: {curr_stable:.2f}\n')
         text += f'\ninstability: {curr_stable:.2f}'

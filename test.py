@@ -1,9 +1,10 @@
 import wavefinder as wf
-import numpy as np, csv
+import numpy as np
+import csv
 
 path = "jack_data/Exp videos/fluid 1"
 
-reach = [449,554]
+reach = [449,500]
 reach[1] += 1
 data = {}
 
