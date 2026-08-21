@@ -81,7 +81,7 @@ def resample(contour, pointCount=200):
     y = np.interp(sample_pos, cumulative_length, points_closed[:, 1])
     return np.column_stack((x,y))
 
-def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fraction=0.3):
+def translate(frame, pointCount=200, min_area=1000, roi_fraction=0.3, maxCentroidStep=70):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     f_height, f_width = frame.shape[:2]
     max_r = 0.965*0.5*f_height
@@ -124,41 +124,28 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fract
         return None
 
     #region frame logic
-    if prevCentroid == None:
-        #region init ROI
-        centrex = f_width / 2
-        centrey = f_height /2
-        roi_width = f_width * roi_fraction
-        roi_height = f_height * roi_fraction
+    #region init ROI
+    centrex = f_width / 2
+    centrey = f_height /2
+    roi_width = f_width * roi_fraction
+    roi_height = f_height * roi_fraction
 
-        xmin = centrex - roi_width/2
-        xmax = centrex + roi_width/2
-        ymin = centrey - roi_height/2
-        ymax = centrey + roi_height/2
-        #endregion
-        roi_candidates = []
+    xmin = centrex - roi_width/2
+    xmax = centrex + roi_width/2
+    ymin = centrey - roi_height/2
+    ymax = centrey + roi_height/2
+    #endregion
+    roi_candidates = []
 
-        for c in candidates:
-            cx, cy = c["centroid"]
-            if(xmin <= cx <= xmax and ymin <= cy <= ymax): roi_candidates.append(c)
-        if len(roi_candidates) == 0:
-            if config.showConsole: print('no contour centroid found within ROI')
-            return None
+    for c in candidates:
+        cx, cy = c["centroid"]
+        if(xmin <= cx <= xmax and ymin <= cy <= ymax): roi_candidates.append(c)
+    if len(roi_candidates) == 0:
+        if config.showConsole: print('no contour centroid found within ROI')
+        return None
 
-        selected = max(roi_candidates, key=lambda candidate: candidate["area"])
+    selected = max(roi_candidates, key=lambda candidate: candidate["area"])
 
-    '''else:
-        prevx, prevy = prevCentroid
-        def from_prev(candidate):
-            cx, cy = candidate["centroid"]
-            return np.sqrt((cx - prevx)**2 + (cy - prevy)**2)
-
-        selected = min(candidates, key=from_prev)
-        d = from_prev(selected)
-        if d > max_distance: #max_distance needs to be added to parameteres
-            if config.showConsole: print(f'contour step exceeds allowed distance')
-            if config.showConsole: print(f'nearest distance = {d:.2f} pixels')
-            return None'''
 
     main_contour = selected["contour"]
     cx, cy = selected["centroid"]
@@ -173,21 +160,20 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fract
     cv2.drawContours(annotated, [main_contour], -1, (0, 255, 0), 1)
     if not np.isnan(cx): cv2.circle(annotated, (int(cx), int(cy)), 5, (0,0,255), -1)
     if config.showMaxCentroidStep and not np.isnan(cx): 
-        cv2.circle(annotated, (int(cx), int(cy)), 70, (1,1,1), 1)
+        cv2.circle(annotated, (int(cx), int(cy)), maxCentroidStep, (1,1,1), 1)
 
     if config.showRadialBound: cv2.circle(annotated, (int(cx), int(cy)), int(max_r), (255,255,0), 1)
     cv2.rectangle(annotated, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0,125, 125), 1)
     return points, annotated, (cx,cy)
 
-def stability(coords):
+def stability(coords, centre):
     coords = coords.T
     x_list = coords[0]
     y_list = coords[1]
-    centre = (np.average(x_list), np.average(y_list))
     radii = np.sqrt((x_list - centre[0])**2 + (y_list - centre[1])**2)
     return np.std(radii)
 
-def retina(path, livePlay=True, save=False, singular=True, nc_points=200, display=True):
+def retina(path, livePlay=True, save=False, singular=True, nc_points=200, display=True, maxCentroidStep=70):
     #region init video
     cap = cv2.VideoCapture(path)
     if not display: livePlay = False
@@ -204,7 +190,6 @@ def retina(path, livePlay=True, save=False, singular=True, nc_points=200, displa
 
     c_history = np.full((frame_count, nc_points, 2), np.nan)
     centroids = np.full((frame_count, 2), np.nan)
-    max_r = 70
 
     print(f"FPS: {fps:.3f}\t\tframe count: {frame_count}")
     print(f"Resolution: {width} x {height}\t\t\tduration: {frame_count / fps:.2f}")
@@ -227,17 +212,18 @@ def retina(path, livePlay=True, save=False, singular=True, nc_points=200, displa
 
         raw = frame.copy()
         result = translate(raw, pointCount=nc_points)
+        curr_stable = np.nan
         if result is not None:
             c_points, shown_frame, centroids[currFrame] = result
             c_history[currFrame] = c_points
             if currFrame != 0:
                 centroid_d = np.linalg.norm(centroids[currFrame]-centroids[currFrame - 1])
 
-            if centroid_d <= max_r: curr_stable = stability(c_points)
-            elif centroid_d > max_r: curr_stable = np.nan
+            if centroid_d <= maxCentroidStep: curr_stable = stability(c_points, centroids[currFrame])
+            elif centroid_d > maxCentroidStep: curr_stable = np.nan
         else: 
             shown_frame = raw.copy()
-            curr_stable = np.nan
+            
 
         if config.showConsole: print(f'stability score: {curr_stable:.2f}\n')
         text += f'\ninstability: {curr_stable:.2f}'
@@ -269,7 +255,7 @@ def retina(path, livePlay=True, save=False, singular=True, nc_points=200, displa
     
     #endregion
 
-def shutter(path, save=False, nc_points=200, startFrame=0):
+def shutter(path, save=False, nc_points=200, startFrame=0, maxCentroidStep=70):
     #region init video
     cap = cv2.VideoCapture(path)
     
@@ -288,7 +274,6 @@ def shutter(path, save=False, nc_points=200, startFrame=0):
 
     c_history = np.full((frame_count, nc_points, 2), np.nan)
     centroids = np.full((frame_count, 2), np.nan)
-    max_r = 70
 
     print(f"FPS: {fps}")
     print(f"frame count: {frame_count}")
@@ -298,7 +283,7 @@ def shutter(path, save=False, nc_points=200, startFrame=0):
 
     currFrame = startFrame
     frames = {}
-    timechart = []
+    timechart = [[i, np.nan] for i in range(frame_count)]
     cap.set(cv2.CAP_PROP_POS_FRAMES, startFrame)
 
     console = False
@@ -322,17 +307,17 @@ def shutter(path, save=False, nc_points=200, startFrame=0):
         #region frame render
         raw = frames[currFrame]
         result = translate(raw, pointCount=nc_points)
+        curr_stable = np.nan
         if result is not None:
             c_points, shown_frame, centroids[currFrame] = result
             c_history[currFrame] = c_points
             if currFrame != 0:
                 centroid_d = np.linalg.norm(centroids[currFrame]-centroids[currFrame-1])
 
-            if centroid_d <= max_r: curr_stable = stability(c_points)
-            elif centroid_d > max_r: curr_stable = np.nan
+            if centroid_d <= maxCentroidStep: curr_stable = stability(c_points, centroids[currFrame])
+            elif centroid_d > maxCentroidStep: curr_stable = np.nan
         else:
             shown_frame = raw.copy()
-            curr_stable = np.nan
 
         if console: print(f'stability score: {curr_stable:.2f}\n')
         text += f'\ninstability: {curr_stable:.2f}'
