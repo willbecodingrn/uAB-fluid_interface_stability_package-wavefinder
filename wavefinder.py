@@ -28,33 +28,26 @@ class DebugConfig:
         self.showGray = False
         self.showBlur = False
         self.showRadialBound = False
+        self.showROI = False
         self.showConsole = False
 
     def debug(self, enabled=True, showEdges=True, showGray=True, showBlur=True, 
-              showRadialBound=True, showConsole=True):
+              showRadialBound=True, showROI=True, showConsole=True):
         self.enabled=enabled
         self.showEdges=showEdges
         self.showGray=showGray
         self.showBlur=showBlur
         self.showRadialBound=showRadialBound
+        self.showROI=showROI
         self.showConsole=showConsole
 
-    #region single options
-    def radialBound_vis(self, active=True): self.showRadialBound=active
-
-    def edges_panel(self, active=True): self.showEdges=active
-
-    def gray_panel(self, active=True): self.showGray=active
-
-    def blur_panel(self, active=True): self.showBlur=active
-
-    def console_output(self, active=True): self.showConsole=active
     #endregion
     
 
 #global instance of debugger
 config=DebugConfig()
 debug = config.debug
+
 #endregion
 
 #region progress bar
@@ -89,24 +82,24 @@ def resample(contour, pointCount=200):
     y = np.interp(sample_pos, cumulative_length, points_closed[:, 1])
     return np.column_stack((x,y))
 
-def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fraction=0.1, max_distance=None):
+def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fraction=0.3):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     f_height, f_width = frame.shape[:2]
-    max_r = 0.96*0.5*f_height
+    max_r = 0.965*0.5*f_height
 
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(15,15)) #increasing local constrast to try to fix broken contours
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(20,20)) #increasing local constrast to try to fix broken contours
     gray = clahe.apply(gray)
-    blurred = cv2.GaussianBlur(gray, (3,3), 0)
+    blurred = cv2.GaussianBlur(gray, (5,5), 0)
 
     #region geometry
-    edges = cv2.Canny(blurred, threshold1=20, threshold2=90) #adjust these
-    #kernel = np.ones((3,3), np.uint8)
+    edges = cv2.Canny(blurred, threshold1=30, threshold2=120) #adjust these
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15,15)) #resewing, was 5,5; might need to be odd
-    edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=2)
+    edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=3)
 
     #debbugging windows
     if config.showEdges: cv2.imshow("Canny", edges)
     if config.showGray: cv2.imshow("gray", gray)
+    if config.showBlur: cv2.imshow("blur", blurred)
 
     contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     contours = [c for c in contours if cv2.contourArea(c) > min_area]
@@ -182,7 +175,7 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fract
     if not np.isnan(cx): cv2.circle(annotated, (int(cx), int(cy)), 5, (0,0,255), -1)
 
     if config.showRadialBound: cv2.circle(annotated, (int(cx), int(cy)), int(max_r), (255,255,0), 1)
-
+    cv2.rectangle(annotated, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0,125, 125), 1)
     return points, annotated
 
 def stability(coords):
@@ -268,7 +261,7 @@ def retina(path, livePlay=True, save=False, singular=True, nc_points=200, displa
     
     #endregion
 
-def shutter(path, save=False, nc_points=200):
+def shutter(path, save=False, nc_points=200, startFrame=0):
     #region init video
     cap = cv2.VideoCapture(path)
     
@@ -278,6 +271,9 @@ def shutter(path, save=False, nc_points=200):
 
     fps = cap.get(cv2.CAP_PROP_FPS)
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    if startFrame >= frame_count:
+        print(f'start frame exceeds duration ({frame_count} frames)')
+        exit()
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     duration = frame_count/fps
@@ -290,10 +286,10 @@ def shutter(path, save=False, nc_points=200):
     print(f"duration: {frame_count / fps:.2f}")
     #endregion
 
-    currFrame = 0
+    currFrame = startFrame
     frames = {}
     timechart = []
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, startFrame)
 
     console = False
 
