@@ -177,7 +177,7 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fract
 
     if config.showRadialBound: cv2.circle(annotated, (int(cx), int(cy)), int(max_r), (255,255,0), 1)
     cv2.rectangle(annotated, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0,125, 125), 1)
-    return points, annotated
+    return points, annotated, (cx,cy)
 
 def stability(coords):
     coords = coords.T
@@ -204,6 +204,7 @@ def retina(path, livePlay=True, save=False, singular=True, nc_points=200, displa
 
     c_history = np.full((frame_count, nc_points, 2), np.nan)
     centroids = np.full((frame_count, 2), np.nan)
+    max_r = 70
 
     print(f"FPS: {fps:.3f}\t\tframe count: {frame_count}")
     print(f"Resolution: {width} x {height}\t\t\tduration: {frame_count / fps:.2f}")
@@ -215,6 +216,7 @@ def retina(path, livePlay=True, save=False, singular=True, nc_points=200, displa
 
     #region sweep
     while True:
+        centroid_d = 0
         ret, frame = cap.read()
         if not ret: break
 
@@ -226,17 +228,13 @@ def retina(path, livePlay=True, save=False, singular=True, nc_points=200, displa
         raw = frame.copy()
         result = translate(raw, pointCount=nc_points)
         if result is not None:
-            c_points, shown_frame = result
+            c_points, shown_frame, centroids[currFrame] = result
             c_history[currFrame] = c_points
-            centroids[currFrame] = (np.mean(c_points[0]), np.mean(c_points[1]))
-            centroid_d = 0
-            max_r = 70
             if currFrame != 0:
                 centroid_d = np.linalg.norm(centroids[currFrame]-centroids[currFrame - 1])
-            if centroid_d <= max_r:
-                curr_stable = stability(c_points)
+
+            if centroid_d <= max_r: curr_stable = stability(c_points)
             elif centroid_d > max_r: curr_stable = np.nan
-            
         else: 
             shown_frame = raw.copy()
             curr_stable = np.nan
@@ -289,6 +287,8 @@ def shutter(path, save=False, nc_points=200, startFrame=0):
     duration = frame_count/fps
 
     c_history = np.full((frame_count, nc_points, 2), np.nan)
+    centroids = np.full((frame_count, 2), np.nan)
+    max_r = 70
 
     print(f"FPS: {fps}")
     print(f"frame count: {frame_count}")
@@ -305,6 +305,7 @@ def shutter(path, save=False, nc_points=200, startFrame=0):
 
     while True:
         #region frame handling
+        centroid_d = 0
         if currFrame not in frames:
             ret, frame = cap.read()
             if not ret: 
@@ -322,9 +323,13 @@ def shutter(path, save=False, nc_points=200, startFrame=0):
         raw = frames[currFrame]
         result = translate(raw, pointCount=nc_points)
         if result is not None:
-            c_points, shown_frame = result
+            c_points, shown_frame, centroids[currFrame] = result
             c_history[currFrame] = c_points
-            curr_stable = stability(c_points)
+            if currFrame != 0:
+                centroid_d = np.linalg.norm(centroids[currFrame]-centroids[currFrame-1])
+
+            if centroid_d <= max_r: curr_stable = stability(c_points)
+            elif centroid_d > max_r: curr_stable = np.nan
         else:
             shown_frame = raw.copy()
             curr_stable = np.nan
