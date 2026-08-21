@@ -4,14 +4,14 @@ import csv
 
 path = "jack_data/Exp videos/fluid 1"
 
-reach = [449,500]
+reach = [448,554]
 reach[1] += 1
 data = {}
 
 for i in range(reach[1]-reach[0]):
     name = f'/MVI_0{reach[0]+i}.MP4'
     currpath = path + name
-    data[name] = wf.retina(currpath, livePlay=False, display=True, singular=False, save=True)
+    data[name] = wf.retina(currpath, livePlay=False, singular=False, save=True, nc_points=1000)
     print(f'\n video {i+1}/{reach[1]-reach[0]} scanned')
 
 wf.clear_bar()

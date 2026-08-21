@@ -23,25 +23,24 @@ currpath = path + "fluid 1/MVI_0449.MP4"
 #region debugger
 class DebugConfig:
     def __init__(self):
-        self.enabled = False
-        self.showEdges = False
-        self.showGray = False
-        self.showBlur = False
+        self.edgesPanel = False
+        self.grayPanel = False
+        self.blurPanel = False
         self.showRadialBound = False
         self.showROI = False
+        self.showMaxCentroidStep = False
         self.showConsole = False
 
-    def debug(self, enabled=True, showEdges=True, showGray=True, showBlur=True, 
-              showRadialBound=True, showROI=True, showConsole=True):
-        self.enabled=enabled
-        self.showEdges=showEdges
-        self.showGray=showGray
-        self.showBlur=showBlur
+    def debug(self, edgesPanel=True, grayPanel=True, blurPanel=True, 
+              showRadialBound=True, showROI=True, showMaxCentroidStep = True,
+              showConsole=True):
+        self.edgesPanel=edgesPanel
+        self.grayPanel=grayPanel
+        self.blurPanel=blurPanel
         self.showRadialBound=showRadialBound
         self.showROI=showROI
+        self.showMaxCentroidStep=showMaxCentroidStep
         self.showConsole=showConsole
-
-    #endregion
     
 
 #global instance of debugger
@@ -97,9 +96,9 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fract
     edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=3)
 
     #debbugging windows
-    if config.showEdges: cv2.imshow("Canny", edges)
-    if config.showGray: cv2.imshow("gray", gray)
-    if config.showBlur: cv2.imshow("blur", blurred)
+    if config.edgesPanel: cv2.imshow("Canny", edges)
+    if config.grayPanel: cv2.imshow("gray", gray)
+    if config.blurPanel: cv2.imshow("blur", blurred)
 
     contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     contours = [c for c in contours if cv2.contourArea(c) > min_area]
@@ -156,9 +155,9 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fract
 
         selected = min(candidates, key=from_prev)
         d = from_prev(selected)
-        if max_distance and (d > max_distance):
-            if console: print(f'contour step exceeds allowed distance')
-            if console: print(f'nearest distance = {d:.2f} pixels')
+        if d > max_distance: #max_distance needs to be added to parameteres
+            if config.showConsole: print(f'contour step exceeds allowed distance')
+            if config.showConsole: print(f'nearest distance = {d:.2f} pixels')
             return None'''
 
     main_contour = selected["contour"]
@@ -173,6 +172,8 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fract
     annotated = frame.copy()
     cv2.drawContours(annotated, [main_contour], -1, (0, 255, 0), 1)
     if not np.isnan(cx): cv2.circle(annotated, (int(cx), int(cy)), 5, (0,0,255), -1)
+    if config.showMaxCentroidStep and not np.isnan(cx): 
+        cv2.circle(annotated, (int(cx), int(cy)), 70, (1,1,1), 1)
 
     if config.showRadialBound: cv2.circle(annotated, (int(cx), int(cy)), int(max_r), (255,255,0), 1)
     cv2.rectangle(annotated, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0,125, 125), 1)
@@ -202,6 +203,7 @@ def retina(path, livePlay=True, save=False, singular=True, nc_points=200, displa
     duration = frame_count/fps
 
     c_history = np.full((frame_count, nc_points, 2), np.nan)
+    centroids = np.full((frame_count, 2), np.nan)
 
     print(f"FPS: {fps:.3f}\t\tframe count: {frame_count}")
     print(f"Resolution: {width} x {height}\t\t\tduration: {frame_count / fps:.2f}")
@@ -226,7 +228,15 @@ def retina(path, livePlay=True, save=False, singular=True, nc_points=200, displa
         if result is not None:
             c_points, shown_frame = result
             c_history[currFrame] = c_points
-            curr_stable = stability(c_points)
+            centroids[currFrame] = (np.mean(c_points[0]), np.mean(c_points[1]))
+            centroid_d = 0
+            max_r = 70
+            if currFrame != 0:
+                centroid_d = np.linalg.norm(centroids[currFrame]-centroids[currFrame - 1])
+            if centroid_d <= max_r:
+                curr_stable = stability(c_points)
+            elif centroid_d > max_r: curr_stable = np.nan
+            
         else: 
             shown_frame = raw.copy()
             curr_stable = np.nan
@@ -253,7 +263,7 @@ def retina(path, livePlay=True, save=False, singular=True, nc_points=200, displa
     if display: cv2.destroyAllWindows()
     
     if save and singular: 
-        np.savetxt(path[-12:-4]+'.csv', timechart, delimiter=',')
+        np.savetxt(path[-12:-4]+'.csv', timechart, delimiter=',') #change according to file context
 
     if save and not singular:
         timechart = timechart.T
