@@ -20,6 +20,43 @@ path = "jack_data/Exp videos/"
 currpath = path + "fluid 1/MVI_0449.MP4"
 '''
 
+#region debugger
+class DebugConfig:
+    def __init__(self):
+        self.enabled = False
+        self.showEdges = False
+        self.showGray = False
+        self.showBlur = False
+        self.showRadialBound = False
+        self.showConsole = False
+
+    def debug(self, enabled=True, showEdges=True, showGray=True, showBlur=True, 
+              showRadialBound=True, showConsole=True):
+        self.enabled=enabled
+        self.showEdges=showEdges
+        self.showGray=showGray
+        self.showBlur=showBlur
+        self.showRadialBound=showRadialBound
+        self.showConsole=showConsole
+
+    #region single options
+    def radialBound_vis(self, active=True): self.showRadialBound=active
+
+    def edges_panel(self, active=True): self.showEdges=active
+
+    def gray_panel(self, active=True): self.showGray=active
+
+    def blur_panel(self, active=True): self.showBlur=active
+
+    def console_output(self, active=True): self.showConsole=active
+    #endregion
+    
+
+#global instance of debugger
+config=DebugConfig()
+debug = config.debug
+#endregion
+
 #region progress bar
 def prog_bar(curr, total, length=30, text=None):
     percent = float(curr)/total
@@ -52,7 +89,7 @@ def resample(contour, pointCount=200):
     y = np.interp(sample_pos, cumulative_length, points_closed[:, 1])
     return np.column_stack((x,y))
 
-def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fraction=0.1, max_distance=None, console=True):
+def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fraction=0.1, max_distance=None):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     f_height, f_width = frame.shape[:2]
     max_r = 0.96*0.5*f_height
@@ -68,17 +105,15 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fract
     edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=2)
 
     #debbugging windows
-    cv2.imshow("Canny", edges)
-    #cv2.imshow("gray", gray)
+    if config.showEdges: cv2.imshow("Canny", edges)
+    if config.showGray: cv2.imshow("gray", gray)
 
     contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     contours = [c for c in contours if cv2.contourArea(c) > min_area]
     if len(contours) == 0:
-        print('no contours found')
+        if config.showConsole: print('no contours found')
         return None
     #endregion
-    #main_contour = max(contours, key=cv2.contourArea)
-
     #region find contour
     candidates = []
 
@@ -93,7 +128,7 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fract
             candidates.append({"contour": c, "centroid": (cx, cy), "area":cv2.contourArea(c)})
 
     if len(candidates) ==0:
-        if console: print("no valid contour centroids found")
+        if config.showConsole: print("no valid contour centroids found")
         return None
 
     #region frame logic
@@ -115,12 +150,12 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fract
             cx, cy = c["centroid"]
             if(xmin <= cx <= xmax and ymin <= cy <= ymax): roi_candidates.append(c)
         if len(roi_candidates) == 0:
-            if console: print('no contour centroid found within ROI')
+            if config.showConsole: print('no contour centroid found within ROI')
             return None
 
         selected = max(roi_candidates, key=lambda candidate: candidate["area"])
 
-    else:
+    '''else:
         prevx, prevy = prevCentroid
         def from_prev(candidate):
             cx, cy = candidate["centroid"]
@@ -131,7 +166,7 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fract
         if max_distance and (d > max_distance):
             if console: print(f'contour step exceeds allowed distance')
             if console: print(f'nearest distance = {d:.2f} pixels')
-            return None
+            return None'''
 
     main_contour = selected["contour"]
     cx, cy = selected["centroid"]
@@ -146,8 +181,7 @@ def translate(frame, prevCentroid=None, pointCount=200, min_area=1000, roi_fract
     cv2.drawContours(annotated, [main_contour], -1, (0, 255, 0), 1)
     if not np.isnan(cx): cv2.circle(annotated, (int(cx), int(cy)), 5, (0,0,255), -1)
 
-    #debugging
-    cv2.circle(annotated, (int(cx), int(cy)), int(max_r), (255,255,0), 1)
+    if config.showRadialBound: cv2.circle(annotated, (int(cx), int(cy)), int(max_r), (255,255,0), 1)
 
     return points, annotated
 
@@ -159,7 +193,7 @@ def stability(coords):
     radii = np.sqrt((x_list - centre[0])**2 + (y_list - centre[1])**2)
     return np.std(radii)
 
-def retina(path, livePlay=True, save=False, singular=True, nc_points=200, showText=False, display=True):
+def retina(path, livePlay=True, save=False, singular=True, nc_points=200, display=True):
     #region init video
     cap = cv2.VideoCapture(path)
     if not display: livePlay = False
@@ -191,11 +225,11 @@ def retina(path, livePlay=True, save=False, singular=True, nc_points=200, showTe
 
         time_seconds = currFrame / fps
         text = f"Frame = {currFrame}, " + f"Time = {time_seconds: .4f}"
-        if showText: print(text)
+        if config.showConsole: print(text)
         text += f"\nduration: {duration:.2f} \nq: close"
 
         raw = frame.copy()
-        result = translate(raw, pointCount=nc_points, console=showText)
+        result = translate(raw, pointCount=nc_points)
         if result is not None:
             c_points, shown_frame = result
             c_history[currFrame] = c_points
@@ -204,7 +238,7 @@ def retina(path, livePlay=True, save=False, singular=True, nc_points=200, showTe
             shown_frame = raw.copy()
             curr_stable = np.nan
 
-        if showText: print(f'stability score: {curr_stable:.2f}\n')
+        if config.showConsole: print(f'stability score: {curr_stable:.2f}\n')
         text += f'\ninstability: {curr_stable:.2f}'
         timechart.append([currFrame,curr_stable])
 
@@ -217,7 +251,7 @@ def retina(path, livePlay=True, save=False, singular=True, nc_points=200, showTe
             if cv2.waitKey(1) & 0xFF == ord("q"): break
         currFrame += 1
         if livePlay: time.sleep(1/fps)
-        prog_bar(currFrame, frame_count, text='\tscanning current video')
+        if not config.showConsole: prog_bar(currFrame, frame_count, text='\tscanning current video')
     #endregion
 
     timechart = np.array(timechart)
@@ -261,6 +295,8 @@ def shutter(path, save=False, nc_points=200):
     timechart = []
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
+    console = False
+
     while True:
         #region frame handling
         if currFrame not in frames:
@@ -272,8 +308,8 @@ def shutter(path, save=False, nc_points=200):
 
         time_seconds = currFrame / fps
         text = f"Frame = {currFrame}, " + f"Time = {time_seconds: .4f}"
-        print(text)
-        text += f"\nduration: {duration:.2f} \na: back 1 frame\nd: forward 1 frame\nq: close"
+        if console: print(text)
+        text += f"\nduration: {duration:.2f} \na: back 1 frame\nd: forward 1 frame\nq: close\nc: toggle console"
         #endregion
 
         #region frame render
@@ -287,7 +323,7 @@ def shutter(path, save=False, nc_points=200):
             shown_frame = raw.copy()
             curr_stable = np.nan
 
-        print(f'stability score: {curr_stable:.2f}\n')
+        if console: print(f'stability score: {curr_stable:.2f}\n')
         text += f'\ninstability: {curr_stable:.2f}'
         timechart.append([currFrame,curr_stable])
 
@@ -299,6 +335,7 @@ def shutter(path, save=False, nc_points=200):
 
         #region frame control
         key = cv2.waitKey(0) & 0xFF
+        if key == ord("c"): console = not console
         if key == ord("d"): currFrame += 1
         elif key == ord("a") and currFrame > 0: currFrame -= 1
         elif key == ord("a") and currFrame == 0: continue
