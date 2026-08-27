@@ -117,7 +117,8 @@ def translate(frame, pointCount=200, min_area=1000, roi_fraction=0.3, maxCentroi
         can_radii = np.sqrt(np.sum((c-[cx,cy])**2, axis=-1))
         if max(can_radii) > max_r: continue
         else:
-            candidates.append({"contour": c, "centroid": (cx, cy), "area":cv2.contourArea(c)})
+            candidates.append({"contour": c, "centroid": (cx, cy), "area":cv2.contourArea(c),
+                               "perimeter":cv2.arcLength(c, True)})
 
     if len(candidates) ==0:
         if config.showConsole: print("no valid contour centroids found")
@@ -144,8 +145,8 @@ def translate(frame, pointCount=200, min_area=1000, roi_fraction=0.3, maxCentroi
         if config.showConsole: print('no contour centroid found within ROI')
         return None
 
+    #selected = max(roi_candidates, key=lambda candidate: candidate["perimeter"])
     selected = max(roi_candidates, key=lambda candidate: candidate["area"])
-
 
     main_contour = selected["contour"]
     cx, cy = selected["centroid"]

@@ -11,7 +11,7 @@ data = {}
 for i in range(reach[1]-reach[0]):
     name = f'/MVI_0{reach[0]+i}.MP4'
     currpath = path + name
-    data[name] = wf.retina(currpath, livePlay=False, singular=False, save=True, nc_points=1000)
+    data[name] = wf.retina(currpath, livePlay=False, singular=False, display=False, save=True, nc_points=1000)
     print(f'\n video {i+1}/{reach[1]-reach[0]} scanned')
 
 wf.clear_bar()
