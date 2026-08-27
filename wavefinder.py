@@ -30,6 +30,7 @@ class DebugConfig:
         self.showROI = False
         self.showMaxCentroidStep = False
         self.showConsole = False
+        self.selector = 'perimeter'
 
     def debug(self, edgesPanel=True, grayPanel=True, blurPanel=True, 
               showRadialBound=True, showROI=True, showMaxCentroidStep = True,
@@ -145,8 +146,7 @@ def translate(frame, pointCount=200, min_area=1000, roi_fraction=0.3, maxCentroi
         if config.showConsole: print('no contour centroid found within ROI')
         return None
 
-    #selected = max(roi_candidates, key=lambda candidate: candidate["perimeter"])
-    selected = max(roi_candidates, key=lambda candidate: candidate["area"])
+    selected = max(roi_candidates, key=lambda candidate: candidate[config.selector])
 
     main_contour = selected["contour"]
     cx, cy = selected["centroid"]
