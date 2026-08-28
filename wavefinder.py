@@ -101,7 +101,7 @@ def translate(frame, pointCount=200, min_area=1000, roi_fraction=0.3, maxCentroi
     if config.grayPanel: cv2.imshow("gray", gray)
     if config.blurPanel: cv2.imshow("blur", blurred)
 
-    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     contours = [c for c in contours if cv2.contourArea(c) > min_area]
     if len(contours) == 0:
         if config.showConsole: print('no contours found')
