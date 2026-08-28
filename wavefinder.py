@@ -164,7 +164,7 @@ def translate(frame, pointCount=200, min_area=1000, roi_fraction=0.3, maxCentroi
         cv2.circle(annotated, (int(cx), int(cy)), maxCentroidStep, (1,1,1), 1)
 
     if config.showRadialBound: cv2.circle(annotated, (int(cx), int(cy)), int(max_r), (255,255,0), 1)
-    cv2.rectangle(annotated, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0,125, 125), 1)
+    if config.showROI: cv2.rectangle(annotated, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0,125, 125), 1)
     return points, annotated, (cx,cy)
 
 def stability(coords, centre):
