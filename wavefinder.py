@@ -55,8 +55,10 @@ def prog_bar(curr, total, length=30, text=None):
     percent = float(curr)/total
     arrow = 'x' * int(round(percent*length))
     spaces = '-' * (length-len(arrow))
-    if text: text += ': '
-    sys.stdout.write(f'\r{text}[{arrow}{spaces}] {percent*100:.2f}%')
+    if text: 
+        text += ': '
+        sys.stdout.write(f'\r{text}[{arrow}{spaces}] {percent*100:.2f}%')
+    else: sys.stdout.write(f'\r[{arrow}{spaces}] {percent*100:.2f}%')
     sys.stdout.flush()
 
 def clear_bar():
